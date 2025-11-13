@@ -1,0 +1,28 @@
+{
+  "name": "imlo-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot for correcting Uzbek spelling errors",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "nodemon bot.js"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "uzbek",
+    "spelling",
+    "correction",
+    "imlo"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "node-telegram-bot-api": "^0.64.0",
+    "openai": "^4.104.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
