@@ -365,11 +365,11 @@ bot.on('message', async (msg) => {
 
   try {
     const corrected = await correctSpelling(text);
-    const response = corrected !== text
-      ? `✅ Matn to'liq to'g'ri yozilgan: ${corrected}`
-      : `Matn xato: ${text}`;
-
-    await bot.sendMessage(chatId, response);
+    if (corrected !== text) {
+      await bot.sendMessage(chatId, `✅ Matn to'liq to'g'ri yozilgan: ${corrected}`);
+    } else {
+      await bot.sendMessage(chatId, `Matn xato: ${text}`);
+    }
   } catch (error) {
     console.error('Error correcting spelling:', error);
     await bot.sendMessage(chatId, '❌ Xatolik yuz berdi. Iltimos, qayta urinib ko\'ring.');
