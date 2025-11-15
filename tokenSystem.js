@@ -51,6 +51,8 @@ function ensureUserExists(userId) {
       totalPayments: 0,
       totalTokensEarned: 0
     };
+    users[userId].achievements = [];
+    users[userId].lastBadge = null;
     saveUsers();
   }
   users[userId].lastActive = new Date().toISOString();
@@ -152,6 +154,37 @@ function recordTransaction(user, amount, type) {
   });
 }
 
+function awardBadge(userId, badge) {
+  if (!badge) return;
+  const user = ensureUserExists(userId);
+  if (user.lastBadge === badge) return;
+  user.achievements = user.achievements || [];
+  user.achievements.push({
+    badge,
+    awardedAt: new Date().toISOString()
+  });
+  user.lastBadge = badge;
+  saveUsers();
+  return badge;
+}
+
+function getLeaderboard(limit = 5) {
+  const entries = Object.entries(users)
+    .map(([userId, data]) => ({
+      userId,
+      tokensUsed: data.totalTokensUsed,
+      tokensEarned: data.totalTokensEarned,
+      badge: data.lastBadge,
+      achievements: data.achievements || [],
+      lastActive: data.lastActive,
+      balance: data.tokens
+    }))
+    .sort((a, b) => b.tokensEarned - a.tokensEarned)
+    .slice(0, limit);
+
+  return entries;
+}
+
 function getUserStats(userId) {
   const user = ensureUserExists(userId);
   return {
@@ -175,5 +208,7 @@ module.exports = {
   isPaymentPending,
   getUserStats,
   formatNumber,
+  awardBadge,
+  getLeaderboard,
   CONFIG
 };

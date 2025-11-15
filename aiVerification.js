@@ -1,7 +1,7 @@
 const { OpenAI } = require('openai');
 
-const MODEL = 'https://clarifai.com/openai/chat-completion/models/gpt-oss-120b';
-const BASE_URL = process.env.AI_BASE_URL || 'https://api.clarifai.com/v2/ext/openai/v1';
+const MODEL = process.env.AI_VERIFIER_MODEL || 'gpt-4o-mini';
+const BASE_URL = process.env.AI_BASE_URL || 'https://api.openai.com/v1';
 
 class AIVerifier {
   constructor(apiKey) {

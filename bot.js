@@ -11,6 +11,8 @@ const {
   verifyPaymentWithAI,
   isPaymentPending,
   formatNumber,
+  awardBadge,
+  getLeaderboard,
   CONFIG
 } = require('./tokenSystem');
 require('dotenv').config();
@@ -109,6 +111,14 @@ if (process.env.NODE_ENV === 'production') {
 
   app.get('/', (req, res) => {
     res.send('IMLO-BOT is running!');
+  });
+
+  app.get('/leaderboard', (req, res) => {
+    if (req.query.secret !== dashboardSecret) {
+      return res.status(403).send('Forbidden');
+    }
+
+    res.json(getLeaderboard(10));
   });
 
   const PORT = process.env.PORT || 3000;
@@ -219,14 +229,26 @@ bot.onText(/\/start/, (msg) => {
   const userId = msg.from.id;
   const tokens = formatTokens(getTokenBalance(userId));
 
-  const welcomeMessage = `Assalomu alaykum! 👋\n\n` +
-    `Men sizning o'zbek imlosini tuzatish bo'yicha AI yordamchingizman. Har bir so'rov 1 ta tokenni iste'mol qiladi.\n` +
-    `💎 Sizda ${tokens} mavjud.\n\n` +
-    `📌 Buyruqlar:\n` +
-    `/help - Bu yordamni ko'rish\n` +
-    `/balance - Tokenlar holatini ko'rish\n` +
-    `/buy - Token sotib olish uchun to'lov ma'lumotini olish\n` +
-    `/about - Bot haqida ma'lumot\n\n` +
+  const welcomeMessage = `Assalomu alaykum! 👋
+
+` +
+    `Men sizning o'zbek imlosini tuzatish bo'yicha AI yordamchingizman. Har bir so'rov 1 ta tokenni iste'mol qiladi.
+` +
+    `💎 Sizda ${tokens} mavjud.
+
+` +
+    `📌 Buyruqlar:
+
+` +
+    `/help - Bu yordamni ko'rish
+` +
+    `/balance - Tokenlar holatini ko'rish
+` +
+    `/buy - Token sotib olish uchun to'lov ma'lumotini olish
+` +
+    `/about - Bot haqida ma'lumot
+
+` +
     `Menga matn yuboring va men imlosini tuzataman! ✍️`;
 
   bot.sendMessage(chatId, welcomeMessage, COMMAND_KEYBOARD);
@@ -234,6 +256,11 @@ bot.onText(/\/start/, (msg) => {
 
 bot.onText(/\/help/, (msg) => {
   bot.sendMessage(msg.chat.id, getHelpMessage(), COMMAND_KEYBOARD);
+});
+
+bot.onText(/\/info(?:\s+([\s\S]+))?/, (msg, match) => {
+  const term = match?.[1]?.trim();
+  respondWithInfo(msg.chat.id, term || '');
 });
 
 bot.onText(/\/balance/, (msg) => {
@@ -295,7 +322,7 @@ bot.on('callback_query', (query) => {
         bot.sendMessage(chatId, getAboutMessage(), COMMAND_KEYBOARD);
         break;
       case 'cmd_info':
-        commandInfo(chatId);
+        respondWithInfo(chatId, '');
         break;
       case 'cmd_essay':
         showEssayInstructions(chatId);
@@ -339,8 +366,8 @@ bot.on('message', async (msg) => {
   try {
     const corrected = await correctSpelling(text);
     const response = corrected !== text
-      ? corrected
-      : "Matnda o'zgartirish topilmadi.";
+      ? `✅ Matn to'liq to'g'ri yozilgan: ${corrected}`
+      : `Matn xato: ${text}`;
 
     await bot.sendMessage(chatId, response);
   } catch (error) {
@@ -350,6 +377,20 @@ bot.on('message', async (msg) => {
 });
 
 const essayPendingUsers = new Set();
+
+function showLeaderboard(chatId) {
+  const entries = getLeaderboard(10);
+  if (!entries.length) {
+    return bot.sendMessage(chatId, "🏆 Reyting hali mavjud emas. Token so'rovlarini boshlang.", COMMAND_KEYBOARD);
+  }
+
+  const formatted = entries.map((entry, index) => {
+    const badge = entry.badge ? ` (${entry.badge})` : '';
+    return `${index + 1}. ${entry.userId} — ${entry.tokensEarned} token${badge} — oxirgi faol: ${new Date(entry.lastActive).toLocaleString()}`;
+  }).join('\n');
+
+  bot.sendMessage(chatId, `🏆 Top talabalar:\n${formatted}`, COMMAND_KEYBOARD);
+}
 
 bot.on('photo', async (msg) => {
   const chatId = msg.chat.id;
@@ -432,6 +473,7 @@ bot.on('polling_error', (error) => {
   }
 });
 
-console.log('Sarvar Dalbayop!!');
+console.log('Sarvar Dalbayop!!')
+
 
 
