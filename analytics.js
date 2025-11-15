@@ -9,6 +9,13 @@ const DEFAULT_STATS = {
   paymentRequests: 0,
   paymentSuccesses: 0,
   paymentFailures: 0,
+  voiceSubmissions: 0,
+  lastRubric: {
+    Structure: null,
+    Arguments: null,
+    Language: null,
+    badge: null
+  },
   lastUpdated: null
 };
 
@@ -76,6 +83,25 @@ function recordPaymentFailure() {
   saveStats();
 }
 
+function recordVoiceSubmission() {
+  const current = loadStats();
+  current.voiceSubmissions += 1;
+  saveStats();
+}
+
+function recordRubric(rubric = {}) {
+  if (!rubric || typeof rubric !== 'object') {
+    return;
+  }
+
+  const current = loadStats();
+  current.lastRubric = {
+    ...current.lastRubric,
+    ...rubric
+  };
+  saveStats();
+}
+
 function getDashboardData() {
   const current = loadStats();
   const successRate = current.paymentRequests
@@ -88,8 +114,10 @@ function getDashboardData() {
     paymentRequests: current.paymentRequests,
     paymentSuccesses: current.paymentSuccesses,
     paymentFailures: current.paymentFailures,
+    voiceSubmissions: current.voiceSubmissions,
     paymentSuccessRate: successRate === null ? null : Number(successRate.toFixed(1)),
-    lastUpdated: current.lastUpdated
+    lastUpdated: current.lastUpdated,
+    lastRubric: current.lastRubric
   };
 }
 
@@ -99,5 +127,7 @@ module.exports = {
   recordPaymentRequest,
   recordPaymentSuccess,
   recordPaymentFailure,
+  recordVoiceSubmission,
+  recordRubric,
   getDashboardData
 };

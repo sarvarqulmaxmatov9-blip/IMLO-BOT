@@ -3,6 +3,7 @@ const express = require('express');
 const analytics = require('./analytics');
 const searchInfo = require('./searchInfo');
 const { correctSpelling } = require('./spellChecker');
+const { reviewEssay, reviewEssayImage, transcribeVoice } = require('./essayChecker');
 const {
   getTokenBalance,
   useTokens,
@@ -13,6 +14,8 @@ const {
   CONFIG
 } = require('./tokenSystem');
 require('dotenv').config();
+
+const ESSAY_TOKEN_COST = Number(process.env.ESSAY_TOKEN_COST || 3);
 
 // Get bot token from environment variables
 const token = process.env.BOT_TOKEN;
@@ -90,11 +93,15 @@ if (process.env.NODE_ENV === 'production') {
             <tr><th>Metric</th><th>Value</th></tr>
             <tr><td>Tokens Spent</td><td class="value">${data.tokensSpent}</td></tr>
             <tr><td>Corrections Performed</td><td class="value">${data.correctionsPerformed}</td></tr>
+            <tr><td>Voice Submissions</td><td class="value">${data.voiceSubmissions}</td></tr>
             <tr><td>Payment Requests</td><td class="value">${data.paymentRequests}</td></tr>
             <tr><td>Payment Successes</td><td class="value">${data.paymentSuccesses}</td></tr>
             <tr><td>Payment Failures</td><td class="value">${data.paymentFailures}</td></tr>
             <tr><td>Payment Success Rate</td><td class="value">${data.paymentSuccessRate ?? 'N/A'}%</td></tr>
           </table>
+          <script id="analytics-json" type="application/json">
+            {"lastRubric": ${JSON.stringify(data.lastRubric)}}
+          </script>
         </body>
       </html>
     `);
@@ -118,15 +125,16 @@ const COMMAND_KEYBOARD = {
   reply_markup: {
     inline_keyboard: [
       [
-        { text: '/help', callback_data: 'cmd_help' },
-        { text: '/balance', callback_data: 'cmd_balance' }
+        { text: '🆘help', callback_data: 'cmd_help' },
+        { text: '💎balance', callback_data: 'cmd_balance' }
       ],
       [
-        { text: '/buy', callback_data: 'cmd_buy' },
-        { text: '/about', callback_data: 'cmd_about' }
+        { text: '💳buy', callback_data: 'cmd_buy' },
+        { text: 'ℹ️about', callback_data: 'cmd_about' }
       ],
       [
-        { text: '/info', callback_data: 'cmd_info' }
+        { text: '📝essay', callback_data: 'cmd_essay' },
+        { text: '🔎info', callback_data: 'cmd_info' }
       ]
     ]
   }
@@ -149,7 +157,7 @@ AI yordamida yuborilgan matnni tuzatadi va to'g'ri javobni qaytaradi.`;
 
 function formatInfoMessage(term, data) {
   if (!term) {
-    return "🔍 /info <so'z> bilan izlashni boshlang. Misol: /info tashbeh";
+    return "🔍 info <so'z> bilan izlashni boshlang. Misol: /info tashbeh";
   }
 
   if (!data) {
@@ -161,10 +169,12 @@ function formatInfoMessage(term, data) {
 
 function respondWithInfo(chatId, term) {
   if (!term) {
+    console.log(`[Info] Prompted help without term for chat ${chatId}`);
     return bot.sendMessage(chatId, formatInfoMessage(null), COMMAND_KEYBOARD);
   }
 
   const result = searchInfo.searchTerm(term);
+  console.log(`[Info] Term search for "${term}" in chat ${chatId} -> ${result ? 'hit' : 'miss'}`);
   return bot.sendMessage(chatId, formatInfoMessage(term, result), {
     parse_mode: 'HTML',
     ...COMMAND_KEYBOARD
@@ -182,6 +192,26 @@ function sendPaymentInstructions(chatId, userId) {
 To'lovni bajarganingizdan so'ng shu yerga chek rasmini yuboring, AI uni tekshiradi va sizga ${formatTokens(paymentInfo.tokens)} qaytariladi.`;
 
   return bot.sendMessage(chatId, buyMessage, { parse_mode: 'HTML', ...COMMAND_KEYBOARD });
+}
+
+function showEssayInstructions(chatId) {
+  const instructions = `📝 Essay checker ishlatish uchun /essay buyrug'iga o'z inshoingiz matnini yuboring (kamida 100 so'z). Har bir tekshiruv ${formatTokens(ESSAY_TOKEN_COST)} talab qiladi.`;
+  return bot.sendMessage(chatId, instructions, COMMAND_KEYBOARD);
+}
+
+function sendPaymentReminder(chatId, userId) {
+  const paymentInfo = requestPayment(userId);
+  const amount = `${paymentInfo.amount} ${CONFIG.CURRENCY}`;
+  console.log(`[Payment] Reminding user ${userId} to pay ${amount}`);
+  bot.sendMessage(
+    chatId,
+    `⚠️ Tokenlaringiz yetarli emas. ${amount} to'lov qilishingiz kerak. Kod: ${paymentInfo.paymentCode}.
+💳 Karta: <code>${paymentInfo.card}</code> (${paymentInfo.cardLast4})
+👤 Oluvchi: ${paymentInfo.receiver}
+
+To'lovni tekshirish uchun chek rasmini shu yerga yuboring, AI uni tekshiradi.`,
+    { parse_mode: 'HTML', ...COMMAND_KEYBOARD }
+  );
 }
 
 bot.onText(/\/start/, (msg) => {
@@ -219,6 +249,32 @@ bot.onText(/\/about/, (msg) => {
   bot.sendMessage(msg.chat.id, getAboutMessage(), COMMAND_KEYBOARD);
 });
 
+bot.onText(/\/essay(?:\s+([\s\S]+))?/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+  const essay = match?.[1]?.trim();
+
+  if (!essay) {
+    return showEssayInstructions(chatId);
+  }
+
+  essayPendingUsers.delete(userId);
+
+  if (!useTokens(userId, ESSAY_TOKEN_COST)) {
+    return sendPaymentReminder(chatId, userId);
+  }
+
+  console.log(`[Essay] User ${userId} submitted ${essay.length} chars (text).`);
+  bot.sendChatAction(chatId, 'typing');
+  try {
+    const review = await reviewEssay(essay);
+    await bot.sendMessage(chatId, `📝 Essay review (${formatTokens(ESSAY_TOKEN_COST)} ishlatildi):\n${review}`);
+  } catch (error) {
+    console.error('Essay review error:', error);
+    bot.sendMessage(chatId, '❌ Essayni tekshirishda xatolik yuz berdi. Keyinroq qayta urinib ko\'ring.');
+  }
+});
+
 bot.on('callback_query', (query) => {
   const [action] = query.data.split('_');
   const chatId = query.message.chat.id;
@@ -240,6 +296,9 @@ bot.on('callback_query', (query) => {
         break;
       case 'cmd_info':
         commandInfo(chatId);
+        break;
+      case 'cmd_essay':
+        showEssayInstructions(chatId);
         break;
       default:
         bot.sendMessage(chatId, 'Buyruqni tanlang.', COMMAND_KEYBOARD);
@@ -290,12 +349,33 @@ bot.on('message', async (msg) => {
   }
 });
 
+const essayPendingUsers = new Set();
+
 bot.on('photo', async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
   const photo = msg.photo?.[msg.photo.length - 1];
 
   if (!photo) {
+    return;
+  }
+
+  if (essayPendingUsers.has(userId)) {
+    essayPendingUsers.delete(userId);
+
+    if (!useTokens(userId, ESSAY_TOKEN_COST)) {
+      return sendPaymentReminder(chatId, userId);
+    }
+
+    const fileUrl = await bot.getFileLink(photo.file_id);
+    bot.sendChatAction(chatId, 'typing');
+    try {
+      const review = await reviewEssayImage(fileUrl);
+      await bot.sendMessage(chatId, `📝 Image-based essay review (${formatTokens(ESSAY_TOKEN_COST)} ishlatildi):\n${review}`);
+    } catch (error) {
+      console.error('Essay image review error:', error);
+      await bot.sendMessage(chatId, '❌ Rasmli essayni tekshirishda xatolik yuz berdi. Keyinroq qayta urinib ko\'ring.');
+    }
     return;
   }
 
@@ -316,7 +396,7 @@ bot.on('photo', async (msg) => {
       );
     } else {
       await bot.editMessageText(
-        `❌ Tasdiqlanmadi: ${result.reason || 'Noaniq chek'}.\nIltimos, to\'liq va aniq skrin yuboring.`,
+        `❌ Tasdiqlanmadi: ${result.reason || 'Noaniq chek'}.\nIltimos, to'liq va aniq skrin yuboring.`,
         { chat_id: chatId, message_id: processingMsg.message_id }
       );
     }
@@ -352,6 +432,6 @@ bot.on('polling_error', (error) => {
   }
 });
 
-console.log('Telegram bot started successfully!');
+console.log('Sarvar Dalbayop!!');
 
 
