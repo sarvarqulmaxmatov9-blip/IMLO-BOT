@@ -1,5 +1,7 @@
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
+const analytics = require('./analytics');
+const searchInfo = require('./searchInfo');
 const { correctSpelling } = require('./spellChecker');
 const {
   getTokenBalance,
@@ -60,6 +62,44 @@ if (process.env.NODE_ENV === 'production') {
     }
   });
 
+  const dashboardSecret = process.env.DASHBOARD_SECRET || 'imlo-dashboard';
+  app.get('/dashboard', (req, res) => {
+    if (req.query.secret !== dashboardSecret) {
+      return res.status(403).send('Forbidden');
+    }
+
+    const data = analytics.getDashboardData();
+    res.send(`
+      <html>
+        <head>
+          <title>IMLO-BOT Analytics</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 1.5rem; background: #f7f7f7; }
+            h1 { margin-bottom: 0.5rem; }
+            table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+            th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
+            th { background: #1e3a8a; color: white; }
+            .value { font-weight: bold; }
+            .muted { color: #555; }
+          </style>
+        </head>
+        <body>
+          <h1>Usage Analytics Dashboard</h1>
+          <p class="muted">Last updated: ${data.lastUpdated}</p>
+          <table>
+            <tr><th>Metric</th><th>Value</th></tr>
+            <tr><td>Tokens Spent</td><td class="value">${data.tokensSpent}</td></tr>
+            <tr><td>Corrections Performed</td><td class="value">${data.correctionsPerformed}</td></tr>
+            <tr><td>Payment Requests</td><td class="value">${data.paymentRequests}</td></tr>
+            <tr><td>Payment Successes</td><td class="value">${data.paymentSuccesses}</td></tr>
+            <tr><td>Payment Failures</td><td class="value">${data.paymentFailures}</td></tr>
+            <tr><td>Payment Success Rate</td><td class="value">${data.paymentSuccessRate ?? 'N/A'}%</td></tr>
+          </table>
+        </body>
+      </html>
+    `);
+  });
+
   app.get('/', (req, res) => {
     res.send('IMLO-BOT is running!');
   });
@@ -73,6 +113,76 @@ if (process.env.NODE_ENV === 'production') {
 console.log('Bot is running...');
 
 const formatTokens = (count) => formatNumber(count) + ' ta token';
+
+const COMMAND_KEYBOARD = {
+  reply_markup: {
+    inline_keyboard: [
+      [
+        { text: '/help', callback_data: 'cmd_help' },
+        { text: '/balance', callback_data: 'cmd_balance' }
+      ],
+      [
+        { text: '/buy', callback_data: 'cmd_buy' },
+        { text: '/about', callback_data: 'cmd_about' }
+      ],
+      [
+        { text: '/info', callback_data: 'cmd_info' }
+      ]
+    ]
+  }
+};
+
+function getHelpMessage() {
+  return `🤖 Bot buyruqlari:
+/start - Botni qayta ishga tushurish
+/balance - Tokenlar soni
+/buy - Token sotib olish uchun ko'rsatmalar
+/about - Bot haqida
+/info <so'z> - Qo'shimcha ma'lumot qidirish (extrainfos.json)
+📦 Matn yuboring va imlo xatolari avtomatik tuziladi. Har bir so'rov 1 tokenni ishlatadi.`;
+}
+
+function getAboutMessage() {
+  return `ℹ️ IMLO-BOT - o'zbek tilida imlo xatolarini avtomatik tuzatadigan Telegram boti.
+AI yordamida yuborilgan matnni tuzatadi va to'g'ri javobni qaytaradi.`;
+}
+
+function formatInfoMessage(term, data) {
+  if (!term) {
+    return "🔍 /info <so'z> bilan izlashni boshlang. Misol: /info tashbeh";
+  }
+
+  if (!data) {
+    return `⚠️ "${term}" uchun qo'shimcha ma'lumot topilmadi.`;
+  }
+
+  return `📚 <b>${term}</b> uchun ma'lumot:\n${data.snippet}`;
+}
+
+function respondWithInfo(chatId, term) {
+  if (!term) {
+    return bot.sendMessage(chatId, formatInfoMessage(null), COMMAND_KEYBOARD);
+  }
+
+  const result = searchInfo.searchTerm(term);
+  return bot.sendMessage(chatId, formatInfoMessage(term, result), {
+    parse_mode: 'HTML',
+    ...COMMAND_KEYBOARD
+  });
+}
+
+function sendPaymentInstructions(chatId, userId) {
+  const paymentInfo = requestPayment(userId);
+  const amount = `${paymentInfo.amount} ${CONFIG.CURRENCY}`;
+  const buyMessage = `${CONFIG.PAYMENT_PROVIDER} orqali ${amount} to'lov qiling:
+💳 Karta: <code>${paymentInfo.card}</code> (${paymentInfo.cardLast4})
+👤 Oluvchi: ${paymentInfo.receiver}
+🔖 Kod: ${paymentInfo.paymentCode}
+
+To'lovni bajarganingizdan so'ng shu yerga chek rasmini yuboring, AI uni tekshiradi va sizga ${formatTokens(paymentInfo.tokens)} qaytariladi.`;
+
+  return bot.sendMessage(chatId, buyMessage, { parse_mode: 'HTML', ...COMMAND_KEYBOARD });
+}
 
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
@@ -89,49 +199,59 @@ bot.onText(/\/start/, (msg) => {
     `/about - Bot haqida ma'lumot\n\n` +
     `Menga matn yuboring va men imlosini tuzataman! ✍️`;
 
-  bot.sendMessage(chatId, welcomeMessage);
+  bot.sendMessage(chatId, welcomeMessage, COMMAND_KEYBOARD);
 });
 
 bot.onText(/\/help/, (msg) => {
-  const chatId = msg.chat.id;
-  const helpMessage = `🤖 Bot buyruqlari:\n` +
-    `/start - Botni qayta ishga tushurish\n` +
-    `/balance - Tokenlar soni\n` +
-    `/buy - Token sotib olish uchun ko'rsatmalar\n` +
-    `/about - Bot haqida\n` +
-    `📦 Matn yuboring va imlo xatolari avtomatik tuziladi. Har bir so'rov 1 tokenni ishlatadi.`;
-
-  bot.sendMessage(chatId, helpMessage);
+  bot.sendMessage(msg.chat.id, getHelpMessage(), COMMAND_KEYBOARD);
 });
 
 bot.onText(/\/balance/, (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
   const tokens = formatTokens(getTokenBalance(userId));
-  bot.sendMessage(chatId, `💎 Sizda ${tokens} mavjud.`);
+  bot.sendMessage(chatId, `💎 Sizda ${tokens} mavjud.`, COMMAND_KEYBOARD);
 });
 
-bot.onText(/\/buy/, (msg) => {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-  const paymentInfo = requestPayment(userId);
-  const amount = `${paymentInfo.amount} ${CONFIG.CURRENCY}`;
-
-  const buyMessage = `${CONFIG.PAYMENT_PROVIDER} orqali ${amount} to'lov qiling:\n` +
-    `💳 Karta: <code>${paymentInfo.card}</code> (${paymentInfo.cardLast4})\n` +
-    `👤 Oluvchi: ${paymentInfo.receiver}\n` +
-    `🔖 Kod: ${paymentInfo.paymentCode}\n\n` +
-    `To'lovni bajarganingizdan so'ng shu yerga chek rasmini yuboring, AI uni tekshiradi va sizga ${formatTokens(paymentInfo.tokens)} qaytariladi.`;
-
-  bot.sendMessage(chatId, buyMessage, { parse_mode: 'HTML' });
-});
+bot.onText(/\/buy/, (msg) => sendPaymentInstructions(msg.chat.id, msg.from.id));
 
 bot.onText(/\/about/, (msg) => {
-  const chatId = msg.chat.id;
-  const aboutMessage = `ℹ️ IMLO-BOT - o'zbek tilida imlo xatolarini avtomatik tuzatadigan Telegram boti.\n` +
-    `AI yordamida yuborilgan matnni tuzatadi va to'g'ri javobni qaytaradi.`;
-  bot.sendMessage(chatId, aboutMessage);
+  bot.sendMessage(msg.chat.id, getAboutMessage(), COMMAND_KEYBOARD);
 });
+
+bot.on('callback_query', (query) => {
+  const [action] = query.data.split('_');
+  const chatId = query.message.chat.id;
+  const userId = query.from.id;
+
+  try {
+    switch (query.data) {
+      case 'cmd_help':
+        bot.sendMessage(chatId, getHelpMessage(), COMMAND_KEYBOARD);
+        break;
+      case 'cmd_balance':
+        bot.sendMessage(chatId, `💎 Sizda ${formatTokens(getTokenBalance(userId))} mavjud.`, COMMAND_KEYBOARD);
+        break;
+      case 'cmd_buy':
+        sendPaymentInstructions(chatId, userId);
+        break;
+      case 'cmd_about':
+        bot.sendMessage(chatId, getAboutMessage(), COMMAND_KEYBOARD);
+        break;
+      case 'cmd_info':
+        commandInfo(chatId);
+        break;
+      default:
+        bot.sendMessage(chatId, 'Buyruqni tanlang.', COMMAND_KEYBOARD);
+    }
+  } finally {
+    bot.answerCallbackQuery(query.id).catch(() => {});
+  }
+});
+
+function commandInfo(chatId) {
+  return respondWithInfo(chatId, '');
+}
 
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;

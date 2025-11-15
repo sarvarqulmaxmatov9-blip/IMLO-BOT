@@ -4,6 +4,8 @@ const AIVerifier = require('./aiVerification');
 
 const USERS_FILE = path.join(__dirname, 'users.json');
 
+const analytics = require('./analytics');
+
 const CONFIG = {
   INITIAL_TOKENS: Number(process.env.INITIAL_TOKENS || 50),
   TOKENS_PER_PAYMENT: Number(process.env.TOKENS_PER_PAYMENT || 50),
@@ -65,6 +67,7 @@ function useTokens(userId, count = 1) {
     user.tokens -= count;
     user.totalTokensUsed += count;
     recordTransaction(user, -count, 'usage');
+    analytics.recordTokensSpent(count);
     saveUsers();
     return true;
   }
@@ -77,6 +80,7 @@ function requestPayment(userId) {
   user.pendingPaymentCode = `PAY-${Date.now().toString(36).toUpperCase()}`;
   user.lastPaymentRequest = new Date().toISOString();
   saveUsers();
+  analytics.recordPaymentRequest();
 
   return {
     amount: CONFIG.PAYMENT_AMOUNT,
@@ -115,6 +119,7 @@ async function verifyPaymentWithAI(userId, imageUrl) {
     };
     recordTransaction(user, CONFIG.TOKENS_PER_PAYMENT, 'payment');
     saveUsers();
+    analytics.recordPaymentSuccess();
 
     return {
       success: true,
