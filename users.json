@@ -1,0 +1,38 @@
+{
+  "8119278053": {
+    "tokens": 46,
+    "paymentPending": false,
+    "pendingPaymentCode": null,
+    "transactions": [
+      {
+        "amount": -1,
+        "type": "usage",
+        "timestamp": "2025-11-15T07:41:15.533Z",
+        "balanceAfter": 49
+      },
+      {
+        "amount": -1,
+        "type": "usage",
+        "timestamp": "2025-11-15T07:44:41.066Z",
+        "balanceAfter": 48
+      },
+      {
+        "amount": -1,
+        "type": "usage",
+        "timestamp": "2025-11-15T07:45:18.562Z",
+        "balanceAfter": 47
+      },
+      {
+        "amount": -1,
+        "type": "usage",
+        "timestamp": "2025-11-15T07:46:09.786Z",
+        "balanceAfter": 46
+      }
+    ],
+    "joinDate": "2025-11-15T07:32:13.264Z",
+    "lastActive": "2025-11-15T07:46:09.786Z",
+    "totalTokensUsed": 4,
+    "totalPayments": 0,
+    "totalTokensEarned": 0
+  }
+}
