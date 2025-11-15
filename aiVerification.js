@@ -33,6 +33,12 @@ class AIVerifier {
         max_tokens: 500
       });
 
+      // Check if response contains any error
+      const error = response?.error || response?.choices?.[0]?.message?.error;
+      if (error) {
+        throw new Error(`AI verification error: ${error}`);
+      }
+
       const raw = response.choices?.[0]?.message?.content?.trim() || '{}';
       const json = this._extractJson(raw);
 
@@ -45,7 +51,7 @@ class AIVerifier {
         reason: json.reason || 'No additional reason provided'
       };
     } catch (error) {
-      console.error('AI receipt verification error:', error);
+      console.error('AI receipt verification error:', error.message);
       return {
         valid: false,
         amount: null,
