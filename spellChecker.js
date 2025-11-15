@@ -5,14 +5,10 @@
 
 const fs = require('fs');
 const path = require('path');
-const { OpenAI } = require('openai');
+const fetch = require('node-fetch');
 require('dotenv').config();
-
-// Initialize OpenAI client with AIML API
-const client = new OpenAI({
-  baseURL: 'https://api.aimlapi.com/v1',
-  apiKey: process.env.AI_API_KEY || '75f19011506e47e28bea3dc6a5738fd4',
-});
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+const GEMINI_KEY = process.env.AI_API_KEY || '';
 
 const BIGGER_BASE_PATH = path.join(__dirname, 'biggerbase.json');
 let dictionary = null;
@@ -217,46 +213,40 @@ async function correctSpelling(text) {
 
   try {
     const dictionaryPreview = getDictionaryPreview();
-    const response = await client.chat.completions.create({
-      model: 'google/gemma-3n-e4b-it',
-      messages: [
-        {
-          role: 'system',
-          content: 'You have access to an Uzbek dictionary sourced from biggerbase.json. Prefer words from this dictionary whenever possible.'
-        },
-        {
-          role: 'user',
-          content: `Sen o'zbek tilidagi imlo (ortografiya) tuzatuvchi yordamchisisan. Foydalanuvchi yuborgan matndagi imlo xatolarini tuzatib, faqat to'g'ri yozilgan matnni qaytar. Faqat imlo xatolarini tuzat, matn mazmunini o'zgartirma. To'g'ri yozilgan matnni o'zgartirmaslik kerak. Faqat tuzatilgan matnni qaytar, boshqa izohlar berma. Matnning asl formatini (katta/kichik harflar, tinish belgilari) saqlab qol.
+    const prompt = 
+      'Sen o\'zbek tilidagi imlo (ortografiya) tuzatuvchi yordamchisisan. ' +
+      'Foydalanuvchi yuborgan matndagi imlo xatolarini tuzatib, faqat to\'g\'ri yozilgan matnni qaytar. ' +
+      'Faqat imlo xatolarini tuzat, matn mazmunini o\'zgartirma. To\'g\'ri yozilgan matnni o\'zgartirmaslik kerak. ' +
+      'Faqat tuzatilgan matnni qaytar, boshqa izohlar berma. Matnning asl formatini saqlab qol.\n\n' +
+      `Dictionary sample: ${dictionaryPreview}\n\n` +
+      'Misol: "Asalomu alaykum" -> "Assalomu alaykum"\n\n' +
+      `Tuzatish kerak: "${trimmedText}"`;
 
-Dictionary sample: ${dictionaryPreview}
-
-Misol: "Asalomu alaykum" -> "Assalomu alaykum"
-
-Tuzatish kerak: "${trimmedText}`
+    const res = await fetch(`${GEMINI_URL}?key=${GEMINI_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [
+          { role: 'user', parts: [{ text: prompt }] }
+        ],
+        generationConfig: {
+          temperature: 0.7,
+          topP: 0.7,
+          maxOutputTokens: 500
         }
-      ],
-      temperature: 0.7,
-      top_p: 0.7,
-      frequency_penalty: 1,
-      max_tokens: 500,
-      top_k: 50,
+      })
     });
-
-    const corrected = response.choices[0].message.content.trim();
-    
-    // Remove any quotes if the AI wrapped the response in quotes
+    if (!res.ok) {
+      return text;
+    }
+    const data = await res.json();
+    const corrected = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
     const cleaned = corrected.replace(/^["']|["']$/g, '');
-    
-    // If the corrected text is the same or empty, return original
     if (!cleaned || cleaned === trimmedText) {
       return text;
     }
-    
     return cleaned;
   } catch (error) {
-    const status = error?.response?.status;
-    const statusText = error?.response?.statusText;
-    console.error('AI Spelling correction error:', status || '', statusText || '', error.message);
     return text;
   }
 }

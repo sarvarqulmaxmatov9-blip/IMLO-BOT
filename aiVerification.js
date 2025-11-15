@@ -1,19 +1,13 @@
-const { OpenAI } = require('openai');
-
-const MODEL = process.env.AI_VERIFIER_MODEL || 'gpt-4o-mini';
-const BASE_URL = process.env.AI_BASE_URL || 'https://api.openai.com/v1';
+const fetch = require('node-fetch');
+require('dotenv').config();
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 
 class AIVerifier {
   constructor(apiKey) {
     if (!apiKey) {
       throw new Error('AI_API_KEY is required for payment verification.');
     }
-
-    this.client = new OpenAI({
-      baseURL: BASE_URL,
-      apiKey,
-      timeout: 60_000
-    });
+    this.apiKey = apiKey;
   }
 
   async verifyReceipt(imageUrl, amount, currency, cardLast4, paymentCode) {
@@ -23,23 +17,20 @@ class AIVerifier {
       '{"valid": true/false, "amount": number, "currency": "string", "cardLast4": "string", "confidence": number (0-100), "reason": "text"}';
 
     try {
-      const response = await this.client.chat.completions.create({
-        model: MODEL,
-        messages: [
-          { role: 'system', content: systemMessage },
-          { role: 'user', content: userMessage }
-        ],
-        temperature: 0.1,
-        max_tokens: 500
+      const prompt = systemMessage + '\n\n' + userMessage;
+      const res = await fetch(`${GEMINI_URL}?key=${this.apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [ { role: 'user', parts: [{ text: prompt }] } ],
+          generationConfig: { temperature: 0.1, maxOutputTokens: 500 }
+        })
       });
-
-      // Check if response contains any error
-      const error = response?.error || response?.choices?.[0]?.message?.error;
-      if (error) {
-        throw new Error(`AI verification error: ${error}`);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
       }
-
-      const raw = response.choices?.[0]?.message?.content?.trim() || '{}';
+      const data = await res.json();
+      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '{}';
       const json = this._extractJson(raw);
 
       return {

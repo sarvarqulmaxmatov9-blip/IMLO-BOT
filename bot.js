@@ -131,6 +131,15 @@ console.log('Bot is running...');
 
 const formatTokens = (count) => formatNumber(count) + ' ta token';
 
+function normalizeForCompare(s) {
+  return (s || '')
+    .normalize('NFKC')
+    .replace(/[\u2019\u02BC]/g, "'")
+    .replace(/[\u2010-\u2015]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 const COMMAND_KEYBOARD = {
   reply_markup: {
     inline_keyboard: [
@@ -365,10 +374,11 @@ bot.on('message', async (msg) => {
 
   try {
     const corrected = await correctSpelling(text);
-    if (corrected !== text) {
-      await bot.sendMessage(chatId, `✅ Matn to'liq to'g'ri yozilgan: ${corrected}`);
+    const same = normalizeForCompare(corrected) === normalizeForCompare(text);
+    if (same) {
+      await bot.sendMessage(chatId, `✍️ Matn to'liq to'g'ri yozilgan: \`${corrected}\``);
     } else {
-      await bot.sendMessage(chatId, `Matn xato: ${text}`);
+      await bot.sendMessage(chatId, `❌ Matn xato: \`${text}\`\n\n✍️ To'g'ri yozilgan: \`${corrected}\``);
     }
   } catch (error) {
     console.error('Error correcting spelling:', error);

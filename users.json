@@ -1,6 +1,6 @@
 {
   "8119278053": {
-    "tokens": 45,
+    "tokens": 39,
     "paymentPending": true,
     "pendingPaymentCode": "PAY-MI020I4D",
     "transactions": [
@@ -33,11 +33,47 @@
         "type": "usage",
         "timestamp": "2025-11-15T08:39:43.304Z",
         "balanceAfter": 45
+      },
+      {
+        "amount": -1,
+        "type": "usage",
+        "timestamp": "2025-11-15T09:06:00.507Z",
+        "balanceAfter": 44
+      },
+      {
+        "amount": -1,
+        "type": "usage",
+        "timestamp": "2025-11-15T09:07:00.734Z",
+        "balanceAfter": 43
+      },
+      {
+        "amount": -1,
+        "type": "usage",
+        "timestamp": "2025-11-15T09:07:17.093Z",
+        "balanceAfter": 42
+      },
+      {
+        "amount": -1,
+        "type": "usage",
+        "timestamp": "2025-11-15T09:07:21.039Z",
+        "balanceAfter": 41
+      },
+      {
+        "amount": -1,
+        "type": "usage",
+        "timestamp": "2025-11-15T09:09:11.124Z",
+        "balanceAfter": 40
+      },
+      {
+        "amount": -1,
+        "type": "usage",
+        "timestamp": "2025-11-15T09:14:31.517Z",
+        "balanceAfter": 39
       }
     ],
     "joinDate": "2025-11-15T07:32:13.264Z",
-    "lastActive": "2025-11-15T08:57:54.877Z",
-    "totalTokensUsed": 5,
+    "lastActive": "2025-11-15T09:14:31.517Z",
+    "totalTokensUsed": 11,
     "totalPayments": 0,
     "totalTokensEarned": 0,
     "lastPaymentRequest": "2025-11-15T08:57:54.877Z"
