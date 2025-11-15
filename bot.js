@@ -25,8 +25,36 @@ if (token === 'your_bot_token_here' || token.includes('your_bot_token')) {
   process.exit(1);
 }
 
-// Create a bot that uses 'polling' to fetch new updates
-const bot = new TelegramBot(token, { polling: true });
+// Create a bot instance
+const bot = new TelegramBot(token, {
+  webHook: process.env.NODE_ENV === 'production' ? {
+    port: process.env.PORT || 3000,
+    host: '0.0.0.0'
+  } : null,
+  polling: process.env.NODE_ENV !== 'production'
+});
+
+// Set up webhook for production
+if (process.env.NODE_ENV === 'production') {
+  const webhookUrl = process.env.WEBHOOK_URL || `https://${process.env.RENDER_EXTERNAL_HOSTNAME}`;
+  const webhookPath = `/bot${token}`;
+  
+  bot.setWebHook(webhookUrl + webhookPath);
+  
+  // Add webhook endpoint
+  const app = require('express')();
+  app.use(bot.webhookCallback(webhookPath));
+  
+  // Add health check endpoint
+  app.get('/', (req, res) => {
+    res.send('IMLO-BOT is running!');
+  });
+  
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+}
 
 console.log('Bot is running...');
 

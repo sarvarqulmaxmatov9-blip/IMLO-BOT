@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: imlo-bot
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: BOT_TOKEN
+        fromService:
+          name: imlo-bot
+          type: env
+          key: BOT_TOKEN
+      - key: WEBHOOK_URL
+        fromService:
+          name: imlo-bot
+          type: env
+          key: RENDER_EXTERNAL_URL
